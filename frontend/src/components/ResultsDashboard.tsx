@@ -6,7 +6,7 @@ import {
     TableContainer, Table, TableHead, TableBody, TableRow, TableCell // Import Table components
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
-import html2pdf from 'html2pdf.js';
+import * as html2pdf from 'html2pdf.js';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 

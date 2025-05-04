@@ -1,0 +1,28 @@
+# Virtual Environment
+venv/
+.venv/
+env/
+ENV/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Compiled files
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# IDE files / Environment files
+.idea/
+.vscode/
+*.swp
+*.swo
+.env
+.DS_Store
+
+# Notebook checkpoints
+.ipynb_checkpoints

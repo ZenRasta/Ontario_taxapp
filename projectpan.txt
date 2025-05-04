@@ -1,0 +1,379 @@
+Goal: Create a functional PoC demonstrating the core user flow: data input -> calculation -> optimized strategy generation (simplified) -> LLM explanation -> results display.
+
+Methodology: Phased approach, building components iteratively. Use Google AI Studio primarily for generating boilerplate code, standard functions, and initial structures based on clear prompts, requiring review and integration by the developer.
+
+Local Environment: macOS, VS Code (or preferred IDE), Python 3.10+, Node.js LTS, Docker Desktop, Git.
+
+Phase 1: Setup & Backend Core Logic (Deterministic Engine - Session 1-2)
+
+Project Setup:
+
+Create a main project directory (e.g., retirement-poc).
+
+Initialize Git: git init.
+
+Create subdirectories: backend/, frontend/.
+
+Backend Setup:
+
+Navigate to backend/.
+
+Set up a Python virtual environment: python3 -m venv venv && source venv/bin/activate.
+
+Install core dependencies: pip install fastapi uvicorn pydantic python-dotenv pandas numpy requests.
+
+Create backend/src/ for application code.
+
+Create .gitignore for Python (venv/, __pycache__/, etc.).
+
+AI Studio Assist (Setup):
+
+Prompt: "Generate a basic FastAPI application structure in Python using Pydantic for request/response models. Include a health check endpoint /health."
+
+Integration: Adapt the generated code into backend/src/main.py and related model files (backend/src/models.py).
+
+Data Models (Pydantic):
+
+Define Pydantic models in backend/src/models.py for:
+
+ScenarioInput: Based on the request_body.scenario structure from the API spec (age, rrsp_balance, etc.).
+
+SpouseInfo: Nested model for spouse details.
+
+YearlyProjection: Structure for one year's data (age, balances, income, tax).
+
+StrategyResult: Contains summary metrics and a list of YearlyProjection.
+
+AdviceResponse: The final API response structure containing optimized and minimum strategies.
+
+AI Studio Assist (Models):
+
+Prompt: "Create Pydantic models in Python for the following JSON structure: [Paste sample request/response JSON from API spec]. Ensure appropriate data types (int, float, Optional, List)."
+
+Integration: Refine generated models, add validation constraints if needed (e.g., Field(ge=0) for balances).
+
+Tax & Simulation Logic (Deterministic - Core PoC Value):
+
+Create backend/src/calculator.py.
+
+Hardcode Tax Rules (PoC Simplification): For 2025 ON/Federal, store brackets, thresholds (OAS Clawback: ~$90,997), RRIF factors, basic personal amounts directly in the Python code as constants or dictionaries. We skip the DB table for now.
+
+Implement core calculation functions (referencing formulas from design doc):
+
+get_rrif_min_factor(age)
+
+calculate_rrif_min_withdrawal(balance, age)
+
+calculate_oas_clawback(net_income, oas_received)
+
+calculate_federal_tax(taxable_income, age) - PoC Simplification: Initially, just apply bracket rates. Add basic personal amount credit later if time permits. Ignore other credits for PoC.
+
+calculate_ontario_tax(taxable_income, age) - PoC Simplification: Apply bracket rates + basic surtax calculation. Add basic personal amount credit later.
+
+calculate_total_tax(taxable_income, age)
+
+AI Studio Assist (Calculators):
+
+Prompt: "Write a Python function calculate_federal_tax(taxable_income) using these 2025 brackets: [Provide hardcoded brackets]. Return the calculated tax." (Repeat for ON tax, OAS clawback).
+
+Prompt: "Write a Python function calculate_rrif_min_withdrawal(balance, age) using the formula: balance / (90 - age) if age < 71, else balance * factor based on this dictionary: {71: 0.0528, 72: 0.0540, ...}."
+
+Integration: Combine generated functions, add imports, refine logic, ensure consistency. Crucially, manually verify the formulas and logic.
+
+Simulation Engine:
+
+In calculator.py, create simulate_strategy(scenario: ScenarioInput, withdrawal_logic: callable) -> StrategyResult:
+
+Takes the user input and a function defining how much to withdraw each year (e.g., get_min_withdrawal, get_optimized_withdrawal).
+
+Loops year by year from scenario.age for scenario.life_expectancy_years.
+
+Inside loop:
+
+Calculate start-of-year state (age, balances).
+
+Apply investment returns (expect_return_pct).
+
+Determine withdrawal amount using withdrawal_logic. Ensure it meets RRIF minimum.
+
+Calculate income sources (RRIF withdrawal, CPP, OAS, Pension).
+
+Calculate OAS clawback and adjust OAS.
+
+Calculate taxable income.
+
+Calculate total tax.
+
+Calculate end-of-year RRIF balance.
+
+Track yearly data in a list (YearlyProjection).
+
+Calculate summary metrics (total tax, terminal balance).
+
+Return StrategyResult.
+
+AI Studio Assist (Simulation):
+
+Prompt: "Generate a Python loop structure that iterates for life_expectancy_years. Inside the loop, it should call placeholder functions like apply_growth(), calculate_withdrawal(), calculate_taxes(), and update_balances(), storing results in a list of dictionaries."
+
+Integration: Replace placeholders with actual calls to calculation functions. Implement the state updates carefully.
+
+Basic Optimization Strategy (PoC Heuristic):
+
+In calculator.py, create get_optimized_withdrawal(current_state, scenario) -> float:
+
+Simplification: Implement a simple heuristic. E.g., "Withdraw the RRIF minimum, plus an extra amount to bring total taxable income up to just below the OAS clawback threshold ($90,997), but not exceeding the desired spending needs after tax." Or simpler: "Withdraw minimum + 5% of RRIF balance". This avoids complex optimization algorithms for the PoC.
+
+Implement get_min_withdrawal(current_state, scenario) which just returns the minimum.
+
+Phase 2: Backend API Endpoint & Frontend Shell (Session 3)
+
+API Endpoint:
+
+In backend/src/main.py, create the /api/v1/advice POST endpoint.
+
+It should accept ScenarioInput in the request body.
+
+Call simulate_strategy twice: once with get_min_withdrawal, once with get_optimized_withdrawal.
+
+Structure the results into the AdviceResponse Pydantic model.
+
+Return the AdviceResponse.
+
+Add basic error handling (e.g., catch exceptions during calculation).
+
+AI Studio Assist (API Endpoint):
+
+Prompt: "Create a FastAPI POST endpoint at /api/v1/advice that accepts a Pydantic model ScenarioInput and returns a Pydantic model AdviceResponse. Include basic try/except error handling returning a 500 status."
+
+Integration: Add the calls to the simulate_strategy function and structure the response.
+
+Run Backend Locally:
+
+Use uvicorn src.main:app --reload --port 8000 in the backend directory.
+
+Test the endpoint using curl, Postman, or FastAPI's built-in Swagger UI (http://127.0.0.1:8000/docs).
+
+Frontend Setup:
+
+Navigate to frontend/.
+
+Use Vite for a faster React setup: npm create vite@latest . --template react-ts.
+
+Install dependencies: npm install && npm install axios @mui/material @emotion/react @emotion/styled recharts (using MUI for quick UI components, Recharts for charts).
+
+Clean up default Vite files.
+
+Create frontend/src/components/ directory.
+
+Create .gitignore for Node (node_modules/, .env, etc.).
+
+Input Form Component:
+
+Create frontend/src/components/InputForm.tsx.
+
+Use MUI components (TextField, Button, Grid, Tooltip) to build the form based on ScenarioInput fields.
+
+Use React useState hooks to manage form state.
+
+Include basic validation (e.g., required fields, numeric inputs).
+
+Add a "Generate Advice" button.
+
+AI Studio Assist (Form):
+
+Prompt: "Generate a React functional component using TypeScript and Material UI (MUI) TextField components for the following fields: [List input fields like Age, RRSP Balance, Desired Spending]. Use useState for state management and include a submit button."
+
+Integration: Structure the form layout using MUI Grid, add tooltips for explanations, implement basic validation.
+
+Phase 3: Frontend-Backend Integration & Basic Results Display (Session 4)
+
+API Client Service:
+
+Create frontend/src/services/api.ts.
+
+Use axios to create a function generateAdvice(scenarioData) that POSTs to http://127.0.0.1:8000/api/v1/advice.
+
+Handle request/response typings (define TypeScript interfaces matching backend Pydantic models).
+
+AI Studio Assist (API Client):
+
+Prompt: "Write a TypeScript function using axios to make a POST request to /api/v1/advice. It should accept an object scenarioData matching this interface [Provide TS Interface for ScenarioInput] and return data matching this interface [Provide TS Interface for AdviceResponse]."
+
+Integration: Add error handling, configure base URL (potentially using environment variables later).
+
+Connect Form to API:
+
+In InputForm.tsx, on button click:
+
+Prevent default form submission.
+
+Call generateAdvice with the current form state.
+
+Handle loading state (disable button, show spinner).
+
+Handle success: Pass the response data up to the parent component (App.tsx).
+
+Handle errors: Show an error message.
+
+Basic Results Display Component:
+
+Create frontend/src/components/ResultsDashboard.tsx.
+
+Accept the AdviceResponse data as props.
+
+Display key summary metrics (total_tax_paid, terminal_rrif_balance) for both strategies using MUI Typography and Card components.
+
+Display the calculated savings.
+
+Add a simple line chart using Recharts to compare RRIF balance over time for both strategies.
+
+Extract and format the yearly_data into the structure Recharts expects.
+
+AI Studio Assist (Results Display):
+
+Prompt: "Generate a React component using TypeScript and Material UI that displays these values: totalTaxOptimized, totalTaxMinimum, terminalBalanceOptimized, terminalBalanceMinimum."
+
+Prompt: "Generate a basic Recharts LineChart component in React/TypeScript that accepts data in the format [{ year: number, optimizedBalance: number, minimumBalance: number }] and plots the two balance lines against the year."
+
+Integration: Combine generated components, pass props correctly, format data for the chart.
+
+Update Main App Component:
+
+In frontend/src/App.tsx:
+
+Manage state for adviceResponse and isLoading, error.
+
+Render InputForm, passing a callback function to receive the scenario data and trigger the API call.
+
+Conditionally render a loading indicator or ResultsDashboard based on state.
+
+Phase 4: AI Explanation Integration & Dockerization (Session 5)
+
+LLM Integration (Backend):
+
+Add Google AI Python library: pip install google-generativeai.
+
+Get an API key from Google AI Studio. Store it securely (use .env file locally: pip install python-dotenv). Load it in main.py or calculator.py.
+
+Modify the /advice endpoint logic in main.py:
+
+After calculating both strategies, gather the necessary data points for the prompt template (defined in the design doc).
+
+Format the prompt string.
+
+Import google.generativeai as genai. Configure the API key.
+
+Instantiate the Gemini model: model = genai.GenerativeModel('gemini-pro') (or latest suitable model).
+
+Make the API call: llm_response = model.generate_content(prompt_string).
+
+Extract the generated text: explanation = llm_response.text.
+
+Add the explanation to the optimized_strategy part of the AdviceResponse.
+
+Important: Add robust error handling around the LLM call (timeouts, API errors). If the LLM call fails, return the results without the explanation, possibly logging the error.
+
+AI Studio Assist (LLM Call):
+
+Prompt (in AI Studio or referring to Gemini docs): "Show Python code using the google-generativeai library to configure an API key, initialize the 'gemini-pro' model, and generate text based on a given prompt string. Include basic error handling."
+
+Integration: Adapt the boilerplate code into the FastAPI endpoint, correctly insert the dynamic data into the prompt, handle the response/errors.
+
+Display Explanation (Frontend):
+
+In ResultsDashboard.tsx, add an MUI Card or Typography section to display the explanation_text received from the API. Format it for readability (e.g., ensure line breaks are handled).
+
+Basic Testing:
+
+Manual: Thoroughly test the E2E flow with the sample case and a few variations (different ages, balances). Check calculations manually for a simple case (e.g., 1-2 years). Verify the explanation makes sense.
+
+Unit (Optional PoC): Add basic pytest tests for the core calculator.py functions using hardcoded inputs and expected outputs.
+
+AI Studio Assist (Unit Tests):
+
+Prompt: "Generate basic pytest test cases for the Python function calculate_oas_clawback(net_income, oas_received) with inputs (80000, 8000) and (100000, 8000), assuming a threshold of 90997 and rate of 0.15."
+
+Integration: Create test files (backend/src/tests/), run tests using pytest.
+
+Dockerization:
+
+Backend Dockerfile (backend/Dockerfile): Create a multi-stage build to keep the final image small. Copy requirements.txt, install deps, copy source code, expose port 8000, set CMD to run uvicorn.
+
+Frontend Dockerfile (frontend/Dockerfile): Multi-stage build. Use Node image to build the static React app (npm run build). Use a lightweight web server image (like nginx-slim) to serve the static files from the dist directory. Configure Nginx to serve index.html for client-side routing.
+
+Docker Compose (docker-compose.yml in root): Define services for backend and frontend. Map ports (e.g., 8000:8000 for backend, 80:80 or 3000:80 for frontend). Set up basic networking. Optionally add environment variable handling (e.g., for API keys, backend URL for frontend).
+
+AI Studio Assist (Docker):
+
+Prompt: "Generate a multi-stage Dockerfile for a Python FastAPI application."
+
+Prompt: "Generate a multi-stage Dockerfile for a React TypeScript application built with Vite, serving static files using Nginx."
+
+Prompt: "Generate a basic docker-compose.yml file with two services: 'backend' building from './backend' and exposing port 8000, and 'frontend' building from './frontend' and exposing port 80."
+
+Integration: Adapt generated files, ensure paths and commands are correct for the project structure. Test locally with docker-compose build and docker-compose up.
+
+Phase 5: Local Run & Basic Cloud Deployment (Session 6)
+
+Final Local Test: Run the complete application using docker-compose up. Access the frontend in the browser (e.g., http://localhost:3000 or specified port). Test the full flow. Debug any container communication issues.
+
+Choose Cloud Platform & Service (PoC Simplicity):
+
+Option A: AWS App Runner: Simple PaaS for containers. Connects directly to a container registry. Handles load balancing, scaling (basic), HTTPS.
+
+Option B: Google Cloud Run: Similar serverless container platform. Pay-per-use, scales to zero. Integrates with Artifact Registry.
+
+Option C: Azure Container Apps: Kubernetes-based container orchestration service, simpler than full AKS.
+
+(Decision for PoC: Choose one, e.g., Cloud Run due to potential free tier and ease of use).
+
+Cloud Deployment Steps (Example: Google Cloud Run):
+
+Prerequisites: Google Cloud account, gcloud CLI installed and configured, enable Cloud Run API, Artifact Registry API.
+
+Build & Push Images:
+
+Create an Artifact Registry repository: gcloud artifacts repositories create ...
+
+Tag Docker images: docker tag backend-image gcr.io/YOUR_PROJECT_ID/retirement-poc/backend:latest, docker tag frontend-image gcr.io/YOUR_PROJECT_ID/retirement-poc/frontend:latest.
+
+Authenticate Docker with gcloud: gcloud auth configure-docker.
+
+Push images: docker push gcr.io/YOUR_PROJECT_ID/retirement-poc/backend:latest, docker push gcr.io/YOUR_PROJECT_ID/retirement-poc/frontend:latest.
+
+Deploy Backend Service:
+
+Use gcloud run deploy backend-service --image=gcr.io/YOUR_PROJECT_ID/retirement-poc/backend:latest --platform=managed --region=YOUR_REGION --allow-unauthenticated --port=8000. Note the deployed URL.
+
+Security: For PoC, --allow-unauthenticated is simplest. Real app needs auth.
+
+Secrets: Pass the Google AI API key via Cloud Run secrets mechanism.
+
+Deploy Frontend Service:
+
+Update the frontend code (api.ts) to point to the deployed backend URL (use environment variables passed during build or runtime). Rebuild and push the frontend image.
+
+Deploy: gcloud run deploy frontend-service --image=gcr.io/YOUR_PROJECT_ID/retirement-poc/frontend:latest --platform=managed --region=YOUR_REGION --allow-unauthenticated. Note the frontend URL.
+
+Testing: Access the deployed frontend URL in a browser and test the application.
+
+Post-PoC Next Steps:
+
+Replace hardcoded tax rules with DB lookup.
+
+Implement proper database storage for scenarios/results (PostgreSQL).
+
+Refine the optimization algorithm.
+
+Implement robust AuthN/AuthZ if user accounts are needed.
+
+Enhance UI/UX based on feedback.
+
+Add comprehensive testing (unit, integration, E2E).
+
+Set up proper CI/CD pipeline (GitHub Actions -> Cloud Run/App Runner).
+
+Implement logging and monitoring.
+
+Address all security considerations from the original design.

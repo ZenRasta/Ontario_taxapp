@@ -1,98 +1,90 @@
-// frontend/src/types/api.ts
+// frontend/src/services/api.ts
+import axios, { AxiosError } from 'axios';
+// Ensure these types match the LATEST definitions in types/api.ts
+import { AdviceRequestData, AdviceResponse, ScenarioInput } from '../types/api';
 
-// Basic Spouse Info 
-export interface SpouseInfo {
-  age: number;
-  rrsp_balance: number;
-  other_income: number;
-}
+// Configure Base URL using environment variables (Vite example)
+// Ensure .env file exists in frontend root with VITE_API_BASE_URL
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'; // Default for local dev
 
-// Input structure matching backend Pydantic model
-export interface ScenarioInput {
-  age: number;
-  rrsp_balance: number;
-  defined_benefit_pension: number;
-  cpp: number;
-  oas: number;
-  tfsa_balance: number;
-  other_taxable_income: number;
-  spouse?: SpouseInfo | null; // Optional
-  desired_spending: number;
-  expect_return_pct: number;
-  life_expectancy_years: number; // Planning horizon
-  province: string;
-  start_year?: number | null; // Optional
-  // --- NEW FIELDS ---
-  inflation_rate_pct: number;
-  target_rrif_depletion_age?: number | null; // Optional
-}
+// Create an Axios instance
+const apiClient = axios.create({
+    baseURL: API_BASE_URL,
+    headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+    },
+    timeout: 30000, // Increase timeout to 30 seconds for potentially longer LLM calls
+});
 
-// Structure for the data sent in the POST request body
-export interface AdviceRequestData {
-  request_id?: string | null;
-  scenario: ScenarioInput;
-}
+/**
+ * Calls the backend API to generate the retirement advice report.
+ * @param scenarioData The user's scenario input data, already processed (numbers).
+ * @returns A Promise resolving with the AdviceResponse data (including markdown report) from the backend.
+ * @throws Throws an error with a user-friendly message if the API call fails.
+ */
+export const generateAdvice = async (scenarioData: ScenarioInput): Promise<AdviceResponse> => {
+    console.log('Sending data to API:', JSON.stringify(scenarioData, null, 2)); // Log stringified data for details
+    console.log('API Endpoint:', `${API_BASE_URL}/api/v1/advice`);
 
-// --- Response Types ---
+    // Construct the request body matching the backend AdviceRequest model
+    const requestBody: AdviceRequestData = {
+         scenario: scenarioData
+         // Add request_id if implemented: request_id: crypto.randomUUID()
+    };
 
-// Data for a single year in the simulation (matching backend YearlyProjection)
-export interface YearlyProjection {
-  year: number;
-  age: number;
-  start_rrif: number;
-  withdrawal: number; // Renamed from withdrawal_amount if needed
-  investment_growth: number;
-  min_withdrawal: number;
-  cpp: number;
-  oas: number; // Net OAS
-  oas_clawback: number;
-  pension: number;
-  taxable_income: number;
-  federal_tax: number;
-  provincial_tax: number;
-  total_tax: number;
-  end_rrif: number;
-  tfsa_balance: number;
-}
+    try {
+        // Make the POST request
+        // Axios expects the response data structure via the generic <AdviceResponse>
+        const response = await apiClient.post<AdviceResponse>('/api/v1/advice', requestBody);
 
-// Summary metrics for a strategy (matching backend SummaryMetrics)
-export interface SummaryMetrics {
-  total_tax_paid: number;
-  terminal_rrif_balance: number;
-  terminal_tax_estimate: number;
-  years_oas_clawback: number;
-  avg_annual_tax_rate: number;
-  rrif_balance_at_end_horizon: number; // Added
-}
+        console.log('API Response Status:', response.status);
+        // Log only part of the response data if report is too long
+        // console.log('API Response Data:', response.data);
 
-// Result for a single simulated strategy (matching backend StrategyResult)
-export interface StrategyResult {
-  strategy_name: string; // Added
-  summary_metrics: SummaryMetrics;
-  yearly_data: YearlyProjection[];
-  // Removed explanation_text and charts_data
-}
+        // Return the full data part of the Axios response
+        return response.data;
 
-// Structure to hold raw results (if included in response, but primary is markdown)
-// This was removed from the primary AdviceResponse, but kept here for reference
-// export interface ResultsContainer {
-//     optimized_strategy: StrategyResult;
-//     minimum_only_strategy: StrategyResult;
-//     savings_summary: SavingsSummary; // SavingsSummary would need to be defined too if used
-// }
+    } catch (error) {
+        console.error('API Error Raw:', error);
+        let errorMessage = 'An unknown error occurred while contacting the server.';
 
-// UPDATED structure for the API response (matching backend AdviceResponse)
-export interface AdviceResponse {
-  result_id: string; // UUID as string
-  scenario_id: string; // UUID as string
-  timestamp: string; // ISO date string
-  report_markdown: string; // The main output
-  // ADDED: Include raw simulation data for the table
-  simulation_results?: StrategyResult[] | null;
-}
+        if (axios.isAxiosError(error)) {
+            const axiosError = error as AxiosError<any>; // Use 'any' for generic error structure
 
-// Note: SavingsSummary is no longer part of the main response structure
-// export interface SavingsSummary {
-//     total_tax_saved: number;
-//     terminal_tax_saved: number;
-// }
+            if (axiosError.response) {
+                // Server responded with an error status (4xx or 5xx)
+                console.error('API Error Status:', axiosError.response.status);
+                console.error('API Error Data:', axiosError.response.data);
+                const backendDetail = axiosError.response.data?.detail || axiosError.response.data?.message || axiosError.message;
+                errorMessage = `Error ${axiosError.response.status}: ${backendDetail}`;
+                 // Handle specific backend errors if needed
+                if (axiosError.response.status === 400) {
+                    errorMessage = `Input Error: ${backendDetail}`;
+                } else if (axiosError.response.status === 500) {
+                    errorMessage = `Server Error: An internal error occurred. Please try again later or check server logs. (${backendDetail})`;
+                } else if (axiosError.response.status === 501) {
+                     errorMessage = `Not Implemented: ${backendDetail}`;
+                }
+
+            } else if (axiosError.request) {
+                // Request made, but no response received
+                console.error('API No Response:', axiosError.request);
+                errorMessage = 'Could not connect to the planner service. Please check your network connection and ensure the API server is running and accessible.';
+            } else {
+                // Error setting up the request
+                console.error('API Request Setup Error:', axiosError.message);
+                errorMessage = `Request setup error: ${axiosError.message}`;
+            }
+        } else if (error instanceof Error) {
+             // Other JS errors
+             errorMessage = `An unexpected application error occurred: ${error.message}`;
+        }
+
+        // Re-throw for the UI to catch
+        throw new Error(errorMessage);
+    }
+};
+
+// Export the configured apiClient if needed elsewhere
+export { apiClient };

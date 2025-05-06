@@ -6,8 +6,7 @@ import {
     SelectChangeEvent
 } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-// Removed SpouseInfo, NonRegisteredAccount imports
-import { ScenarioInput, SpouseInfo, NonRegisteredAccount } from '../types/api'; // Keep ScenarioInput
+import { ScenarioInput } from '../types/api'; // Removed SpouseInfo, NonRegisteredAccount imports
 
 // --- State Interfaces (remain the same) ---
 interface SpouseInfoState { age: string; rrsp_balance: string; employment_income: string; pension_income: string; cpp_oas_income: string; investment_income: string; }

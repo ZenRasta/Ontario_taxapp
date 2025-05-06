@@ -1,5 +1,5 @@
 // frontend/src/App.tsx
-import React, { useState } from 'react'; // Removed useEffect
+import { useState } from 'react'; // Removed useEffect
 
 // MUI Imports
 import Container from '@mui/material/Container';

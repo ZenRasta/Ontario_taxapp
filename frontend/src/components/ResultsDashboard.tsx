@@ -28,7 +28,7 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ data }) => {
 
     // --- Find the specific strategy data for the table ---
     // Let's display the "Top-up-to-OAS" strategy data, or the first one if not found
-    const tableStrategyData = simulation_results?.find(res => res.strategy_name === "Top-up-to-OAS") || simulation_results?.[0];
+    const tableStrategyData = simulation_results?.find((res: StrategyResult) => res.strategy_name === "Top-up-to-OAS") || simulation_results?.[0];
 
     // --- PDF Export Handler ---
     const handleExportPDF = () => {

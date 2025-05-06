@@ -1,79 +1,73 @@
-// ./services/api.ts
+// frontend/src/services/api.ts
 import axios, { AxiosError } from 'axios';
-import { AdviceRequestData, AdviceResponse, ScenarioInput } from '../types/api';
+// Import types from the correct location
+import type { AdviceRequestData, AdviceResponse, ScenarioInput } from '../types/api';
 
-// Configure Base URL using environment variables
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+// --- Environment Variable for Base URL ---
+// Reads from .env file via Vite (e.g., VITE_API_BASE_URL=http://127.0.0.1:8000)
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'; // Fallback for local dev
 
-// Create an Axios instance with the base URL and default headers
+// --- Axios Client Instance ---
 const apiClient = axios.create({
     baseURL: API_BASE_URL,
+    timeout: 30000, // 30 second timeout
     headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
     },
-    timeout: 15000, // 15 seconds
 });
 
-/**
- * Calls the backend API to generate retirement advice.
- * @param scenarioData The user's scenario input data, already processed (numbers).
- * @returns A Promise resolving with the AdviceResponse data from the backend.
- * @throws Throws an error with a user-friendly message if the API call fails.
- */
-export const generateAdvice = async (scenarioData: ScenarioInput): Promise<AdviceResponse> => {
-    console.log('Sending data to API:', scenarioData);
-    console.log('API URL:', API_BASE_URL);
+// --- Exported API Function ---
+export const generateAdvice = async (
+    scenarioData: ScenarioInput
+): Promise<AdviceResponse> => {
 
-    // Construct the request body matching the backend AdviceRequest model
-    const requestBody: AdviceRequestData = {
-        scenario: scenarioData
-    };
+    const endpoint = '/api/v1/advice';
+    const requestBody: AdviceRequestData = { scenario: scenarioData };
+
+    console.log(`API Request: POST ${apiClient.defaults.baseURL}${endpoint}`);
+    console.log('API Request Body:', JSON.stringify(requestBody, null, 2));
 
     try {
-        // Make the POST request to the /api/v1/advice endpoint
-        const response = await apiClient.post<AdviceResponse>('/api/v1/advice', requestBody);
-
-        console.log('API Response Status:', response.status);
-        
-        // Return only the data part of the Axios response
-        return response.data;
+        const response = await apiClient.post<AdviceResponse>(endpoint, requestBody);
+        console.log(`API Response Status: ${response.status}`);
+        return response.data; // Return the parsed JSON data
 
     } catch (error) {
-        console.error('API Error Raw:', error);
-        let errorMessage = 'An unknown error occurred while contacting the server.';
+        console.error('API Call Error:', error); // Log the raw error
+
+        let errorMessage = 'An unexpected error occurred while generating the advice.';
 
         if (axios.isAxiosError(error)) {
             const axiosError = error as AxiosError<any>;
-
             if (axiosError.response) {
                 // The request was made and the server responded with a status code
                 // that falls out of the range of 2xx
-                console.error('API Error Status:', axiosError.response.status);
-                console.error('API Error Data:', axiosError.response.data);
-
-                // Try to extract the 'detail' field from the backend's error response
-                const backendDetail = axiosError.response.data?.detail || axiosError.response.data?.message;
-                errorMessage = `Error ${axiosError.response.status}: ${backendDetail || axiosError.message}`;
-
+                const status = axiosError.response.status;
+                const backendDetail = axiosError.response.data?.detail || axiosError.message;
+                errorMessage = `Server Error ${status}: ${backendDetail}`;
+                console.error(`API Error Response (${status}):`, axiosError.response.data);
             } else if (axiosError.request) {
                 // The request was made but no response was received
-                console.error('API No Response:', axiosError.request);
-                errorMessage = 'Could not connect to the planner service. Please check your network connection and ensure the API server is running.';
+                errorMessage = 'Network Error: Could not connect to the API server. Please ensure it is running and accessible.';
+                console.error('API No Response Error:', axiosError.request);
             } else {
                 // Something happened in setting up the request that triggered an Error
+                errorMessage = `Request Error: ${axiosError.message}`;
                 console.error('API Request Setup Error:', axiosError.message);
-                errorMessage = `Request setup error: ${axiosError.message}`;
             }
         } else if (error instanceof Error) {
-            // Handle non-Axios errors
-            errorMessage = `An unexpected error occurred: ${error.message}`;
+             errorMessage = `Application Error: ${error.message}`;
         }
 
-        // Re-throw the error with a consolidated, user-friendly message
+        // Throw a new error with the processed message for the UI
         throw new Error(errorMessage);
     }
 };
 
-// Export the apiClient for use in other services if needed
-export { apiClient };
+// Optional: Export the client if needed elsewhere
+// export { apiClient };
+
+// Note: Removed the previous 'export { apiClient }' at the end,
+// as exporting the function directly is the primary goal here.
+// If you needed to export 'apiClient' too, you could add it back or export individually.

@@ -22,7 +22,7 @@ export const generateAdvice = async (
     scenarioData: ScenarioInput
 ): Promise<AdviceResponse> => {
 
-    const endpoint = '/api/v1/advice';
+    const endpoint = '/v1/advice';
     const requestBody: AdviceRequestData = { scenario: scenarioData };
 
     console.log(`API Request: POST ${apiClient.defaults.baseURL}${endpoint}`);

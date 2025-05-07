@@ -261,7 +261,7 @@ async def health_check():
     return HealthStatus(status="ok")
 
 @app.post(
-    "/api/v1/advice",
+    "/v1/advice",
     response_model=AdviceResponse, # Uses updated response model
     status_code=status.HTTP_200_OK,
     tags=["Advice"],
